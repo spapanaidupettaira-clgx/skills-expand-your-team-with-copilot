@@ -516,12 +516,85 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.entries(filteredActivities).forEach(([name, details]) => {
       renderActivityCard(name, details);
     });
+
+    // Check URL hash and scroll/highlight if targeting an activity
+    checkUrlHashAndHighlight();
+  }
+
+  // Helper to generate a URL-safe slug for activity anchors
+  function getActivitySlug(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  // Copy activity link to clipboard with visual confirmation
+  function handleCopyActivityLink(button, url, activityName) {
+    const originalHtml = button.innerHTML;
+    const showCopiedState = () => {
+      button.classList.add("copied");
+      button.innerHTML = `
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span class="share-btn-label">Copied!</span>
+      `;
+      showMessage(`Link to "${activityName}" copied to clipboard!`, "success");
+      setTimeout(() => {
+        button.classList.remove("copied");
+        button.innerHTML = originalHtml;
+      }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(showCopiedState).catch(() => {
+        fallbackCopyText(url, showCopiedState);
+      });
+    } else {
+      fallbackCopyText(url, showCopiedState);
+    }
+  }
+
+  // Fallback copy method for older browsers or restricted environments
+  function fallbackCopyText(text, callback) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      if (callback) callback();
+    } catch (err) {
+      console.error("Fallback copy failed:", err);
+    }
+    document.body.removeChild(textArea);
+  }
+
+  // Scroll to and highlight activity card if URL has matching hash
+  function checkUrlHashAndHighlight() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith("#activity-")) {
+      const targetCard = document.querySelector(hash);
+      if (targetCard) {
+        setTimeout(() => {
+          targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+          targetCard.classList.add("highlight-activity");
+          setTimeout(() => {
+            targetCard.classList.remove("highlight-activity");
+          }, 2500);
+        }, 150);
+      }
+    }
   }
 
   // Function to render a single activity card
   function renderActivityCard(name, details) {
     const activityCard = document.createElement("div");
     activityCard.className = "activity-card";
+
+    // Anchor ID for direct sharing and navigation
+    const slug = getActivitySlug(name);
+    activityCard.id = `activity-${slug}`;
 
     // Calculate spots and capacity
     const totalSpots = details.max_participants;
@@ -542,7 +615,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const activityType = getActivityType(name, details.description);
     const typeInfo = activityTypes[activityType];
 
-    // Format the schedule using the new helper function
+    // Format the schedule using the helper function
     const formattedSchedule = formatSchedule(details);
 
     // Create activity tag
@@ -564,6 +637,28 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>
     `;
+
+    // Build social share URLs
+    const pageUrl = window.location.href.split("#")[0];
+    const shareUrl = `${pageUrl}#activity-${slug}`;
+    const shareText = `Check out ${name} at Mergington High School!`;
+    const shareSubject = `Extracurricular Activity: ${name} at Mergington High`;
+    const shareBody = `Hi,\n\nI thought you might be interested in ${name} at Mergington High School!\n\n${details.description}\nSchedule: ${formattedSchedule}\n\nCheck out the details here: ${shareUrl}\n`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + shareUrl)}`;
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    const emailUrl = `mailto:?subject=${encodeURIComponent(shareSubject)}&body=${encodeURIComponent(shareBody)}`;
+
+    // SVG icons for social sharing buttons
+    const copyIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const whatsappIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M20.52 3.48A11.93 11.93 0 0 0 12.06 0C5.45 0 .08 5.37.08 11.98c0 2.11.55 4.17 1.6 5.99L0 24l6.19-1.62a11.94 11.94 0 0 0 5.87 1.53h.01c6.61 0 11.98-5.37 11.98-11.98 0-3.2-.1-6.24-3.48-8.45zm-8.46 18.4a9.92 9.92 0 0 1-5.06-1.39l-.36-.21-3.76.99 1-3.67-.23-.38a9.93 9.93 0 0 1-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.02 2.91a9.88 9.88 0 0 1 2.91 7.03c0 5.48-4.46 9.94-9.94 9.94zm5.45-7.44c-.3-.15-1.77-.87-2.04-.97-.28-.1-.48-.15-.68.15-.2.3-.77.97-.95 1.17-.17.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5a9.07 9.07 0 0 1-1.67-2.08c-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.68-1.64-.93-2.25-.25-.6-.5-.52-.68-.53l-.58-.01c-.2 0-.53.08-.8.38-.28.3-1.06 1.04-1.06 2.53 0 1.5 1.09 2.94 1.24 3.15.15.2 2.15 3.28 5.2 4.6 3.06 1.32 3.06.88 3.61.83.56-.05 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.13-.27-.2-.57-.35z"/></svg>`;
+    const twitterIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`;
+    const facebookIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`;
+    const emailIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>`;
+    const shareIconSvg = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`;
+
+    const supportsNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
     activityCard.innerHTML = `
       ${tagHtml}
@@ -620,7 +715,72 @@ document.addEventListener("DOMContentLoaded", () => {
         `
         }
       </div>
+      <div class="social-share">
+        <div class="social-share-header">
+          <span class="social-share-label">Share with friends:</span>
+        </div>
+        <div class="social-share-buttons">
+          <button type="button" class="social-share-btn share-copy" title="Copy link to ${name}" aria-label="Copy link to ${name}">
+            ${copyIconSvg}
+            <span class="share-btn-label">Copy Link</span>
+          </button>
+          ${
+            supportsNativeShare
+              ? `
+            <button type="button" class="social-share-btn share-native" title="Share ${name} via device menu" aria-label="Share ${name} via device menu">
+              ${shareIconSvg}
+              <span class="share-btn-label">Share</span>
+            </button>
+          `
+              : ""
+          }
+          <a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="social-share-btn share-whatsapp" title="Share ${name} on WhatsApp" aria-label="Share ${name} on WhatsApp">
+            ${whatsappIconSvg}
+            <span class="share-btn-label">WhatsApp</span>
+          </a>
+          <a href="${twitterUrl}" target="_blank" rel="noopener noreferrer" class="social-share-btn share-x" title="Share ${name} on X" aria-label="Share ${name} on X">
+            ${twitterIconSvg}
+            <span class="share-btn-label">X</span>
+          </a>
+          <a href="${facebookUrl}" target="_blank" rel="noopener noreferrer" class="social-share-btn share-facebook" title="Share ${name} on Facebook" aria-label="Share ${name} on Facebook">
+            ${facebookIconSvg}
+            <span class="share-btn-label">Facebook</span>
+          </a>
+          <a href="${emailUrl}" class="social-share-btn share-email" title="Share ${name} via Email" aria-label="Share ${name} via Email">
+            ${emailIconSvg}
+            <span class="share-btn-label">Email</span>
+          </a>
+        </div>
+      </div>
     `;
+
+    // Add click handler for copy button
+    const copyButton = activityCard.querySelector(".share-copy");
+    if (copyButton) {
+      copyButton.addEventListener("click", () => {
+        handleCopyActivityLink(copyButton, shareUrl, name);
+      });
+    }
+
+    // Add click handler for native share button (if supported)
+    if (supportsNativeShare) {
+      const nativeShareButton = activityCard.querySelector(".share-native");
+      if (nativeShareButton) {
+        nativeShareButton.addEventListener("click", async () => {
+          try {
+            await navigator.share({
+              title: `${name} - Mergington High School`,
+              text: shareText,
+              url: shareUrl,
+            });
+          } catch (err) {
+            if (err.name !== "AbortError") {
+              console.error("Error sharing:", err);
+            }
+          }
+        });
+      }
+    }
 
     // Add click handlers for delete buttons
     const deleteButtons = activityCard.querySelectorAll(".delete-participant");
@@ -993,6 +1153,16 @@ document.addEventListener("DOMContentLoaded", () => {
     setTheme,
     toggleTheme,
   };
+
+  // Expose social sharing utilities for external access and tests
+  window.socialSharing = {
+    getActivitySlug,
+    handleCopyActivityLink,
+    checkUrlHashAndHighlight,
+  };
+
+  // Listen for hash changes to navigate directly to shared activity
+  window.addEventListener("hashchange", checkUrlHashAndHighlight);
 
   // Initialize app
   initializeTheme();
