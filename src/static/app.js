@@ -43,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Authentication state
   let currentUser = null;
+  let hasCheckedSharedActivity = false;
 
   // Time range mappings for the dropdown
   const timeRanges = {
@@ -363,6 +364,136 @@ document.addEventListener("DOMContentLoaded", () => {
     return "academic";
   }
 
+  // Helper to generate the direct sharing URL for an activity
+  function getActivityShareUrl(activityName) {
+    const origin =
+      window.location.origin ||
+      `${window.location.protocol}//${window.location.host}`;
+    return `${origin}${window.location.pathname}?activity=${encodeURIComponent(
+      activityName
+    )}`;
+  }
+
+  // Helper to construct URLs for various social platforms
+  function getShareUrls(activityName, description) {
+    const shareUrl = getActivityShareUrl(activityName);
+    const text = `Check out ${activityName} at Mergington High School! ${description}`;
+
+    return {
+      shareUrl,
+      whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(
+        text + " " + shareUrl
+      )}`,
+      x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+        text
+      )}&url=${encodeURIComponent(shareUrl)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+        shareUrl
+      )}`,
+      email: `mailto:?subject=${encodeURIComponent(
+        "Join " + activityName + " at Mergington High School"
+      )}&body=${encodeURIComponent(text + "\n\n" + shareUrl)}`,
+    };
+  }
+
+  // Copy activity direct link to clipboard with visual and message feedback
+  async function copyActivityLink(activityName, buttonElement) {
+    const shareUrl = getActivityShareUrl(activityName);
+    let copied = false;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        copied = true;
+      } catch (err) {
+        console.warn("Clipboard API failed, trying fallback:", err);
+      }
+    }
+
+    if (!copied) {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = shareUrl;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        copied = document.execCommand("copy");
+        document.body.removeChild(textArea);
+      } catch (err) {
+        console.error("Fallback copy failed:", err);
+      }
+    }
+
+    if (copied) {
+      const tooltip = buttonElement.querySelector(".tooltip-text");
+      const originalText = tooltip ? tooltip.textContent : "";
+      if (tooltip) {
+        tooltip.textContent = "Copied!";
+      }
+      buttonElement.classList.add("copied");
+
+      showMessage(`Link to "${activityName}" copied to clipboard!`, "success");
+
+      setTimeout(() => {
+        if (tooltip) {
+          tooltip.textContent = originalText;
+        }
+        buttonElement.classList.remove("copied");
+      }, 2000);
+    } else {
+      showMessage("Could not copy link to clipboard.", "error");
+    }
+  }
+
+  // Trigger native browser share dialog when supported
+  async function shareActivityNative(activityName, description) {
+    const shareUrl = getActivityShareUrl(activityName);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${activityName} - Mergington High School`,
+          text: `Check out ${activityName} at Mergington High School! ${description}`,
+          url: shareUrl,
+        });
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Native share failed:", err);
+        }
+      }
+    }
+  }
+
+  // Highlight and scroll to an activity if specified via ?activity= query parameter
+  function checkSharedActivityLink() {
+    if (hasCheckedSharedActivity) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const sharedActivity = params.get("activity");
+    if (!sharedActivity) return;
+
+    hasCheckedSharedActivity = true;
+
+    setTimeout(() => {
+      const cards = activitiesList.querySelectorAll(".activity-card");
+      for (const card of cards) {
+        if (
+          card.dataset.activity &&
+          card.dataset.activity.toLowerCase() === sharedActivity.toLowerCase()
+        ) {
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.classList.add("highlight-shared");
+          setTimeout(() => {
+            card.classList.remove("highlight-shared");
+          }, 3500);
+          break;
+        }
+      }
+    }, 150);
+  }
+
   // Function to fetch activities from API with optional day and time filters
   async function fetchActivities() {
     // Show loading skeletons first
@@ -470,12 +601,15 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.entries(filteredActivities).forEach(([name, details]) => {
       renderActivityCard(name, details);
     });
+
+    checkSharedActivityLink();
   }
 
   // Function to render a single activity card
   function renderActivityCard(name, details) {
     const activityCard = document.createElement("div");
     activityCard.className = "activity-card";
+    activityCard.dataset.activity = name;
 
     // Calculate spots and capacity
     const totalSpots = details.max_participants;
@@ -498,6 +632,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Format the schedule using the new helper function
     const formattedSchedule = formatSchedule(details);
+
+    // Get social share URLs
+    const shareUrls = getShareUrls(name, details.description);
+    const hasNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
     // Create activity tag
     const tagHtml = `
@@ -569,6 +707,41 @@ document.addEventListener("DOMContentLoaded", () => {
         `
         }
       </div>
+      <div class="activity-share-section">
+        <span class="share-label">Share:</span>
+        <div class="share-buttons">
+          ${
+            hasNativeShare
+              ? `
+            <button type="button" class="share-btn share-native-btn tooltip" aria-label="Share ${name}">
+              <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/></svg>
+              <span class="tooltip-text">Share...</span>
+            </button>
+          `
+              : ""
+          }
+          <button type="button" class="share-btn share-copy-btn tooltip" aria-label="Copy link to ${name}">
+            <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+            <span class="tooltip-text">Copy link</span>
+          </button>
+          <a class="share-btn share-whatsapp-btn tooltip" href="${shareUrls.whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="Share ${name} on WhatsApp">
+            <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.16 6.94C8.95 6.94 8.61 7.02 8.32 7.33C8.03 7.65 7.22 8.41 7.22 9.96C7.22 11.5 8.35 12.98 8.51 13.19C8.67 13.4 10.73 16.57 13.88 17.93C14.63 18.25 15.21 18.44 15.67 18.59C16.42 18.83 17.11 18.8 17.65 18.72C18.25 18.63 19.5 17.96 19.76 17.23C20.02 16.5 20.02 15.87 19.94 15.74C19.86 15.6 19.65 15.52 19.34 15.37C19.03 15.22 17.5 14.47 17.21 14.37C16.92 14.26 16.72 14.21 16.51 14.52C16.3 14.83 15.71 15.52 15.53 15.73C15.35 15.93 15.17 15.96 14.86 15.81C14.55 15.65 13.56 15.33 12.39 14.29C11.48 13.48 10.87 12.48 10.71 12.22C10.55 11.96 10.69 11.82 10.85 11.66C10.99 11.53 11.16 11.3 11.31 11.12C11.47 10.94 11.52 10.81 11.62 10.6C11.73 10.39 11.67 10.21 11.6 10.06C11.52 9.9 10.9 8.38 10.65 7.76C10.4 7.17 10.14 7.25 9.95 7.24C9.77 7.24 9.56 7.23 9.36 7.23L9.16 6.94Z"/></svg>
+            <span class="tooltip-text">WhatsApp</span>
+          </a>
+          <a class="share-btn share-x-btn tooltip" href="${shareUrls.x}" target="_blank" rel="noopener noreferrer" aria-label="Share ${name} on X">
+            <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            <span class="tooltip-text">X (Twitter)</span>
+          </a>
+          <a class="share-btn share-facebook-btn tooltip" href="${shareUrls.facebook}" target="_blank" rel="noopener noreferrer" aria-label="Share ${name} on Facebook">
+            <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            <span class="tooltip-text">Facebook</span>
+          </a>
+          <a class="share-btn share-email-btn tooltip" href="${shareUrls.email}" aria-label="Email details for ${name}">
+            <svg class="share-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+            <span class="tooltip-text">Email</span>
+          </a>
+        </div>
+      </div>
     `;
 
     // Add click handlers for delete buttons
@@ -585,6 +758,22 @@ document.addEventListener("DOMContentLoaded", () => {
           openRegistrationModal(name);
         });
       }
+    }
+
+    // Add click handler for copy link button
+    const copyButton = activityCard.querySelector(".share-copy-btn");
+    if (copyButton) {
+      copyButton.addEventListener("click", () => {
+        copyActivityLink(name, copyButton);
+      });
+    }
+
+    // Add click handler for native share button (if supported)
+    const nativeShareButton = activityCard.querySelector(".share-native-btn");
+    if (nativeShareButton) {
+      nativeShareButton.addEventListener("click", () => {
+        shareActivityNative(name, details.description);
+      });
     }
 
     activitiesList.appendChild(activityCard);
