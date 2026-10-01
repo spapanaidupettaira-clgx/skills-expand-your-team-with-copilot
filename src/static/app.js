@@ -429,17 +429,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (copied) {
       const tooltip = buttonElement.querySelector(".tooltip-text");
-      const originalText = tooltip ? tooltip.textContent : "";
       if (tooltip) {
+        if (!buttonElement.dataset.originalText) {
+          buttonElement.dataset.originalText = tooltip.textContent;
+        }
         tooltip.textContent = "Copied!";
       }
       buttonElement.classList.add("copied");
 
       showMessage(`Link to "${activityName}" copied to clipboard!`, "success");
 
-      setTimeout(() => {
-        if (tooltip) {
-          tooltip.textContent = originalText;
+      clearTimeout(buttonElement._copiedTimeout);
+      buttonElement._copiedTimeout = setTimeout(() => {
+        if (tooltip && buttonElement.dataset.originalText) {
+          tooltip.textContent = buttonElement.dataset.originalText;
         }
         buttonElement.classList.remove("copied");
       }, 2000);
