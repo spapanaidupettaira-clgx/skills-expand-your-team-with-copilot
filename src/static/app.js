@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // State for activities and filters
   let allActivities = {};
   let currentFilter = "all";
-  let currentDifficulty = "all";
+  let currentDifficulty = "";
   let searchQuery = "";
   let currentDay = "";
   let currentTimeRange = "";
@@ -59,6 +59,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const activeDifficultyFilter = document.querySelector(".difficulty-filter.active");
     if (activeDifficultyFilter) {
       currentDifficulty = activeDifficultyFilter.dataset.difficulty;
+    } else {
+      currentDifficulty = "";
     }
 
     // Initialize day filter
@@ -662,12 +664,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add event listeners to difficulty filter buttons
   difficultyFilters.forEach((button) => {
     button.addEventListener("click", () => {
-      // Update active class
-      difficultyFilters.forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
+      const selectedDifficulty = button.dataset.difficulty;
+
+      // If clicking already active button, toggle it off to view all activities
+      if (button.classList.contains("active")) {
+        button.classList.remove("active");
+        currentDifficulty = "";
+      } else {
+        // Update active class
+        difficultyFilters.forEach((btn) => btn.classList.remove("active"));
+        button.classList.add("active");
+        currentDifficulty = selectedDifficulty;
+      }
 
       // Update current difficulty and display filtered activities
-      currentDifficulty = button.dataset.difficulty;
       displayFilteredActivities();
     });
   });
