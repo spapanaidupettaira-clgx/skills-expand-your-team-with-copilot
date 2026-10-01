@@ -25,6 +25,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeLoginModal = document.querySelector(".close-login-modal");
   const loginMessage = document.getElementById("login-message");
 
+  // Theme toggle elements
+  const themeToggle = document.getElementById("theme-toggle");
+  const themeIcon = document.getElementById("theme-icon");
+  const themeText = document.getElementById("theme-text");
+
   // Activity categories with corresponding colors
   const activityTypes = {
     sports: { label: "Sports", color: "#e8f5e9", textColor: "#2e7d32" },
@@ -855,13 +860,74 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // --- Dark Mode / Theme Functions ---
+  // Set and persist dark/light theme
+  function setTheme(theme) {
+    if (theme === "dark") {
+      document.body.classList.add("dark-mode");
+      if (themeIcon) themeIcon.textContent = "☀️";
+      if (themeText) themeText.textContent = "Light Mode";
+      if (themeToggle) {
+        themeToggle.setAttribute("aria-label", "Switch to light mode");
+        themeToggle.setAttribute("title", "Switch to light mode");
+      }
+    } else {
+      document.body.classList.remove("dark-mode");
+      if (themeIcon) themeIcon.textContent = "🌙";
+      if (themeText) themeText.textContent = "Dark Mode";
+      if (themeToggle) {
+        themeToggle.setAttribute("aria-label", "Switch to dark mode");
+        themeToggle.setAttribute("title", "Switch to dark mode");
+      }
+    }
+
+    try {
+      localStorage.setItem("theme", theme);
+    } catch (e) {
+      // Local storage may not be accessible in some browser environments
+    }
+  }
+
+  // Toggle between dark and light themes
+  function toggleTheme() {
+    const isDark = document.body.classList.contains("dark-mode");
+    setTheme(isDark ? "light" : "dark");
+  }
+
+  // Initialize theme from saved user preference
+  function initializeTheme() {
+    let savedTheme = null;
+    try {
+      savedTheme = localStorage.getItem("theme");
+    } catch (e) {
+      // Local storage may not be accessible in some browser environments
+    }
+
+    if (savedTheme === "dark") {
+      setTheme("dark");
+    } else {
+      setTheme("light");
+    }
+
+    if (themeToggle) {
+      themeToggle.addEventListener("click", toggleTheme);
+    }
+  }
+
   // Expose filter functions to window for future UI control
   window.activityFilters = {
     setDayFilter,
     setTimeRangeFilter,
   };
 
+  // Expose theme functions to window for future UI control
+  window.themeManager = {
+    setTheme,
+    toggleTheme,
+  };
+
   // Initialize app
+  initializeTheme();
   checkAuthentication();
   initializeFilters();
   fetchActivities();
